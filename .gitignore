@@ -1,0 +1,83 @@
+# ========================
+# SECURITY - Environment Variables
+# ========================
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ========================
+# Virtual Environment
+# ========================
+.venv/
+venv/
+ENV/
+env/
+
+# ========================
+# Data Files (Sensitive)
+# ========================
+data.csv
+badges.json
+progress.csv
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================
+# IDE
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/
+*.log.*
+
+# ========================
+# Testing
+# ========================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ========================
+# OS
+# ========================
+Thumbs.db
+Desktop.ini
