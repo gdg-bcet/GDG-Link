@@ -110,7 +110,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,  # Use environment variable for security
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -379,9 +379,13 @@ async def get_all_progress(
                     "example": {
                         "program_name": "Google Cloud Study Jams 2025",
                         "total_users": 46,
+                        "verified_users": 42,
                         "completed_users": 0,
                         "total_badges": 20,
                         "completion_percentage": 0,
+                        "tier": "Tier 3",
+                        "tier_emoji": "🥉",
+                        "tier_target": 50,
                         "average_badges": 2,
                         "badge_completion_stats": {
                             "The Basics of Google Cloud Compute": 18,
@@ -418,10 +422,19 @@ async def get_stats(request: Request) -> Dict[str, Any]:
     **📊 Analytics Included:**
 
     ### User Metrics
-    - 👥 **Total Users** - All verified participants
+    - 👥 **Total Users** - All registered participants (verified + unverified)
+    - ✅ **Verified Users** - Participants linked with Discord
     - 🏅 **Completed Users** - Participants with all 20 badges
-    - 📊 **Completion Percentage** - Overall program completion rate
-    - 🎯 **Average Badges** - Mean badges per participant
+    - 📊 **Completion Percentage** - Tier-based progress percentage
+    - 🏆 **Tier Information** - Current program tier (Tier 1/2/3)
+    - 🎯 **Tier Target** - Completion goal for current tier
+    - 🎖️ **Tier Emoji** - Visual tier indicator (🥇/🥈/🥉)
+    - 📈 **Average Badges** - Mean badges per participant (non-zero only)
+
+    ### Tier System
+    - 🥉 **Tier 3** (0-49 completions): Progress shown out of 50
+    - 🥈 **Tier 2** (50-69 completions): Progress shown out of 70
+    - 🥇 **Tier 1** (70-100+ completions): Progress shown out of 100, capped at 100%
 
     ### Badge Analytics
     - 🏆 **Badge Completion Stats** - Individual badge completion counts
@@ -442,9 +455,13 @@ async def get_stats(request: Request) -> Dict[str, Any]:
     {
       "program_name": "Google Cloud Study Jams 2025",
       "total_users": 46,
+      "verified_users": 42,
       "completed_users": 0,
       "total_badges": 20,
       "completion_percentage": 0,
+      "tier": "Tier 3",
+      "tier_emoji": "🥉",
+      "tier_target": 50,
       "average_badges": 2,
       "badge_completion_stats": {
         "The Basics of Google Cloud Compute": 18,

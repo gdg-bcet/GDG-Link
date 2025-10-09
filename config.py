@@ -38,7 +38,7 @@ BADGE_LIST = [
     "Get Started with Google Workspace Tools",
     "App Building with AppSheet",
     "Develop with Apps Script and AppSheet",
-    "Develop GenAI Apps with Gemini and Streamlit",
+    "Develop Gen AI Apps with Gemini and Streamlit",
     "Build a Website on Google Cloud",
     "Set Up a Google Cloud Network",
     "Store, Process, and Manage Data on Google Cloud - Console",
@@ -48,7 +48,7 @@ BADGE_LIST = [
     "Analyze Speech and Language with Google APIs",
     "Monitoring in Google Cloud",
     "Prompt Design in Vertex AI",
-    "Arcade Level 3 Game"
+    "Level 3: Generative AI"
 ]
 
 # Flask Configuration (Legacy - replaced by FastAPI)

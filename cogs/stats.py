@@ -26,7 +26,7 @@ class Stats(commands.Cog):
             df.groupby(['discord_id', 'name'])
             .agg(
                 badge_count=('badge_name', 'count'),
-                last_badge_date=('earned_date', 'max')
+                last_badge_date=('submitted_at', 'max')
             )
             .reset_index()
         )
@@ -66,14 +66,35 @@ class Stats(commands.Cog):
             await ctx.defer()
 
         stats_data = db.get_progress_stats()
+
+        # Determine tier based on completed users
+        completed_users = stats_data.get('completed_users', 0)
+        completion_percentage = stats_data.get('completion_percentage', 0)
+
+        if completed_users < 50:
+            tier = "Tier 3"
+            tier_emoji = "🥉"
+            tier_target = "50"
+            tier_color = discord.Color.from_rgb(205, 127, 50)  # Bronze
+        elif completed_users < 70:
+            tier = "Tier 2"
+            tier_emoji = "🥈"
+            tier_target = "70"
+            tier_color = discord.Color.from_rgb(192, 192, 192)  # Silver
+        else:
+            tier = "Tier 1"
+            tier_emoji = "🥇"
+            tier_target = "100"
+            tier_color = discord.Color.gold()
+
         embed = discord.Embed(
             title="📊 Cloud Study Jams 2025 Statistics",
-            description="*[View Detailed Stats](https://gdg-bcet.netlify.app/)*",
-            color=discord.Color.blue()
+            description=f"*[View Detailed Stats](https://gdg-bcet.netlify.app/)*\n\n{tier_emoji} **Current Tier: {tier}**",
+            color=tier_color
         )
 
         verified = stats_data.get('verified_users', 0)
-        completion_rate = round((stats_data.get('completed_users', 0) / verified) * 100, 1) if verified > 0 else 0
+        average_badges = stats_data.get('average_badges', 0)
 
         embed.add_field(
             name="👥 Participants",
@@ -82,12 +103,12 @@ class Stats(commands.Cog):
         )
         embed.add_field(
             name="🏅 Badges",
-            value=f"**{stats_data.get('total_badges', 0)}** earned\n**{len(stats_data.get('badge_distribution', {}))}** unique",
+            value=f"**{stats_data.get('total_badges', 0)}** earned\n**{average_badges}** avg per user",
             inline=True
         )
         embed.add_field(
             name="📈 Progress",
-            value=f"**{stats_data.get('completed_users', 0)}** completed\n**{completion_rate}%** completion",
+            value=f"**{completed_users}/{tier_target}** completions\n**{completion_percentage}%** tier progress",
             inline=True
         )
 

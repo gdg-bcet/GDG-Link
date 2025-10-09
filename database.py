@@ -51,12 +51,12 @@ ALL_BADGES = [
     "Get Started with Pub/Sub", "Get Started with API Gateway",
     "Get Started with Looker", "Get Started with Dataplex",
     "Get Started with Google Workspace Tools", "App Building with AppSheet",
-    "Develop with Apps Script and AppSheet", "Develop GenAI Apps with Gemini and Streamlit",
+    "Develop with Apps Script and AppSheet", "Develop Gen AI Apps with Gemini and Streamlit",
     "Build a Website on Google Cloud", "Set Up a Google Cloud Network",
     "Store, Process, and Manage Data on Google Cloud - Console", "Cloud Run Functions: 3 Ways",
     "App Engine: 3 Ways", "Cloud Speech API: 3 Ways",
     "Analyze Speech and Language with Google APIs", "Monitoring in Google Cloud",
-    "Prompt Design in Vertex AI", "Arcade Level 3 Game"
+    "Prompt Design in Vertex AI", "Level 3: Generative AI"
 ]
 
 
@@ -154,7 +154,7 @@ class DatabaseOperations:
                     u.skillsboost_url,
                     u.profile_color,
                     COUNT(b.id) as badge_count,
-                    MAX(b.earned_date) as latest_badge_date,
+                    MAX(b.submitted_at) as latest_badge_date,
                     GROUP_CONCAT(b.badge_name SEPARATOR '|||') as badges_earned
                 FROM users u
                 LEFT JOIN badges b ON u.discord_id = b.user_discord_id
@@ -212,35 +212,51 @@ class DatabaseOperations:
         cursor = self.connection.cursor(dictionary=True)
 
         try:
-            # Build dynamic query with filters
-            search_condition = ""
-            if search:
-                # Use parameterized query to prevent SQL injection
-                search_condition = " AND u.name LIKE %s"
-
-            # Base query with optional search filter
-            base_query = f"""
+            # First, get ALL users to calculate global ranks
+            cursor.execute("""
                 SELECT
                     u.discord_id,
                     u.name,
                     u.skillsboost_url,
                     u.profile_color,
                     COUNT(b.id) as badge_count,
-                    MAX(b.earned_date) as latest_badge_date,
+                    MAX(b.submitted_at) as latest_badge_date,
                     GROUP_CONCAT(b.badge_name SEPARATOR '|||') as badges_earned
                 FROM users u
                 LEFT JOIN badges b ON u.discord_id = b.user_discord_id
-                WHERE u.verified = 1{search_condition}
+                WHERE u.verified = 1
                 GROUP BY u.discord_id, u.name, u.skillsboost_url, u.profile_color
-            """
+            """)
+            all_users = cursor.fetchall()
 
-            # Execute query with or without search parameter
+            # Sort ALL users by global ranking criteria (badge_count DESC, latest_badge_date ASC, name ASC)
+            # FCFS: Earlier last badge date = higher rank for same badge count
+            def global_sort_key(x):
+                badge_count = x['badge_count'] or 0
+                latest_date = x['latest_badge_date']
+                # For FCFS: earlier dates should rank higher
+                # Use timestamp() to include hours/minutes/seconds, not just date
+                if latest_date:
+                    # Convert to timestamp (seconds since epoch) for precise sorting
+                    date_value = latest_date.timestamp()
+                else:
+                    # Put users with no badges at the end
+                    date_value = float('inf')
+                return (-badge_count, date_value, x['name'])
+
+            all_users.sort(key=global_sort_key)
+
+            # Create a mapping of discord_id to global rank
+            rank_map = {}
+            for rank, user in enumerate(all_users, start=1):
+                rank_map[user['discord_id']] = rank
+
+            # Apply filters to get the subset of users to display
+            users_data = all_users.copy()
+
+            # Apply search filter
             if search:
-                cursor.execute(base_query, (f"%{search}%",))
-            else:
-                cursor.execute(base_query)
-
-            users_data = cursor.fetchall()
+                users_data = [u for u in users_data if search.lower() in u['name'].lower()]
 
             # Apply badge count filter in Python for complex logic
             if badge_count_condition:
@@ -275,23 +291,29 @@ class DatabaseOperations:
                             filtered_users.append(user)
                 users_data = filtered_users
 
-            # Sort the data
+            # Sort the filtered data ONLY if user explicitly requests different sorting
+            # Default (sort_by="badge_count", sort_order="desc") should use global ranking
             if sort_by == "name":
+                # User requested name sorting
                 users_data.sort(key=lambda x: x['name'], reverse=(sort_order == "desc"))
-            else:  # badge_count
+            elif sort_order == "asc":
+                # User requested ascending badge count (non-default)
                 def sort_key(x):
                     badge_count = x['badge_count'] or 0
                     latest_date = x['latest_badge_date']
-                    date_ordinal = -(latest_date.toordinal() if latest_date else 0)
-                    return (badge_count, date_ordinal, x['name'])
+                    if latest_date:
+                        date_value = latest_date.timestamp()
+                    else:
+                        date_value = float('inf')
+                    return (badge_count, date_value, x['name'])
+                users_data.sort(key=sort_key)
+            # else: keep global ranking order (default: sort_by="badge_count", sort_order="desc")
 
-                users_data.sort(key=sort_key, reverse=(sort_order == "desc"))            # Get total user count (unfiltered)
-            cursor.execute("SELECT COUNT(*) as total FROM users WHERE verified = 1")
-            total_users = cursor.fetchone()['total']
+            # Get total user count (unfiltered)
+            total_users = len(all_users)
 
             # Process data efficiently in memory
             users_list = []
-            rank = 1
 
             for user in users_data:
                 # Parse badges from concatenated string
@@ -303,7 +325,7 @@ class DatabaseOperations:
                 badges_status = {badge: "Done" if badge in user_badges else "" for badge in ALL_BADGES}
 
                 users_list.append({
-                    "Rank": rank,
+                    "Rank": rank_map[user['discord_id']],  # Use global rank from rank_map
                     "Discord ID": user['discord_id'],
                     "Name": user['name'],
                     "Profile URL": user['skillsboost_url'] or "",
@@ -311,7 +333,6 @@ class DatabaseOperations:
                     "Badge Count": user['badge_count'] or 0,
                     "badges": badges_status
                 })
-                rank += 1
 
             return {
                 "program_name": "Google Cloud Study Jams 2025",
@@ -340,35 +361,36 @@ class DatabaseOperations:
             # Optimized mega-query for main stats
             cursor.execute("""
                 SELECT
-                    COUNT(DISTINCT CASE WHEN u.verified = 1 THEN u.discord_id END) as total_users,
+                    COUNT(*) as total_users,
+                    COUNT(DISTINCT CASE WHEN u.discord_id IS NOT NULL THEN u.discord_id END) as verified_users,
                     COUNT(DISTINCT CASE WHEN badge_counts.badge_count = 20 THEN badge_counts.discord_id END) as completed_users,
                     COALESCE(SUM(badge_counts.badge_count), 0) as total_badges_earned,
+                    COUNT(DISTINCT CASE WHEN badge_counts.badge_count > 0 THEN badge_counts.discord_id END) as users_with_badges,
                     (SELECT u.discord_id FROM users u
                      LEFT JOIN badges b ON u.discord_id = b.user_discord_id
-                     WHERE u.verified = 1 GROUP BY u.discord_id
-                     ORDER BY COUNT(b.id) DESC, MAX(b.earned_date) ASC LIMIT 1) as top_discord_id,
+                     WHERE u.discord_id IS NOT NULL GROUP BY u.discord_id
+                     ORDER BY COUNT(b.id) DESC, MAX(b.submitted_at) ASC LIMIT 1) as top_discord_id,
                     (SELECT u.name FROM users u
                      LEFT JOIN badges b ON u.discord_id = b.user_discord_id
-                     WHERE u.verified = 1 GROUP BY u.discord_id
-                     ORDER BY COUNT(b.id) DESC, MAX(b.earned_date) ASC LIMIT 1) as top_name,
+                     WHERE u.discord_id IS NOT NULL GROUP BY u.discord_id
+                     ORDER BY COUNT(b.id) DESC, MAX(b.submitted_at) ASC LIMIT 1) as top_name,
                     (SELECT u.skillsboost_url FROM users u
                      LEFT JOIN badges b ON u.discord_id = b.user_discord_id
-                     WHERE u.verified = 1 GROUP BY u.discord_id
-                     ORDER BY COUNT(b.id) DESC, MAX(b.earned_date) ASC LIMIT 1) as top_url,
+                     WHERE u.discord_id IS NOT NULL GROUP BY u.discord_id
+                     ORDER BY COUNT(b.id) DESC, MAX(b.submitted_at) ASC LIMIT 1) as top_url,
                     (SELECT u.profile_color FROM users u
                      LEFT JOIN badges b ON u.discord_id = b.user_discord_id
-                     WHERE u.verified = 1 GROUP BY u.discord_id
-                     ORDER BY COUNT(b.id) DESC, MAX(b.earned_date) ASC LIMIT 1) as top_color,
+                     WHERE u.discord_id IS NOT NULL GROUP BY u.discord_id
+                     ORDER BY COUNT(b.id) DESC, MAX(b.submitted_at) ASC LIMIT 1) as top_color,
                     (SELECT COUNT(b.id) FROM users u
                      LEFT JOIN badges b ON u.discord_id = b.user_discord_id
-                     WHERE u.verified = 1 GROUP BY u.discord_id
-                     ORDER BY COUNT(b.id) DESC, MAX(b.earned_date) ASC LIMIT 1) as top_badge_count
+                     WHERE u.discord_id IS NOT NULL GROUP BY u.discord_id
+                     ORDER BY COUNT(b.id) DESC, MAX(b.submitted_at) ASC LIMIT 1) as top_badge_count
                 FROM users u
                 LEFT JOIN (
                     SELECT user_discord_id as discord_id, COUNT(*) as badge_count
                     FROM badges GROUP BY user_discord_id
                 ) badge_counts ON u.discord_id = badge_counts.discord_id
-                WHERE u.verified = 1
             """)
 
             main_stats = cursor.fetchone()
@@ -401,11 +423,11 @@ class DatabaseOperations:
 
             # Get progress timeline
             cursor.execute("""
-                SELECT earned_date as date, COUNT(*) as count
+                SELECT DATE(submitted_at) as date, COUNT(*) as count
                 FROM badges
-                WHERE earned_date IS NOT NULL
-                GROUP BY earned_date
-                ORDER BY earned_date
+                WHERE submitted_at IS NOT NULL
+                GROUP BY DATE(submitted_at)
+                ORDER BY DATE(submitted_at)
             """)
             timeline_data = cursor.fetchall()
             progress_timeline = {}
@@ -416,10 +438,36 @@ class DatabaseOperations:
 
             # Calculate metrics
             total_users = main_stats['total_users'] or 0
+            verified_users = main_stats['verified_users'] or 0
             completed_users = main_stats['completed_users'] or 0
             total_badges_earned = main_stats['total_badges_earned'] or 0
-            average_badges = int(total_badges_earned / max(total_users, 1))
-            completion_percentage = int((completed_users / max(total_users, 1)) * 100)
+            users_with_badges = main_stats['users_with_badges'] or 0
+
+            # Average badges only for users who have at least 1 badge
+            average_badges = int(total_badges_earned / max(users_with_badges, 1))
+
+            # Calculate completion percentage based on tiers
+            # Tier 3 (0-49): Show progress out of 50
+            # Tier 2 (50-69): Show progress out of 70
+            # Tier 1 (70-100): Show progress out of 100, capped at 100%
+            if completed_users < 50:
+                # Tier 3: Calculate percentage out of 50
+                completion_percentage = int((completed_users / 50) * 100)
+                tier_name = "Tier 3"
+                tier_emoji = "🥉"
+                tier_target = 50
+            elif completed_users < 70:
+                # Tier 2: Calculate percentage out of 70
+                completion_percentage = int((completed_users / 70) * 100)
+                tier_name = "Tier 2"
+                tier_emoji = "🥈"
+                tier_target = 70
+            else:
+                # Tier 1: Calculate percentage out of 100, cap at 100%
+                completion_percentage = min(int((completed_users / 100) * 100), 100)
+                tier_name = "Tier 1"
+                tier_emoji = "🥇"
+                tier_target = 100
 
             # Top performer
             top_performer = {}
@@ -435,9 +483,14 @@ class DatabaseOperations:
             return {
                 "program_name": "Google Cloud Study Jams 2025",
                 "total_users": total_users,
+                "verified_users": verified_users,
                 "completed_users": completed_users,
                 "total_badges": len(ALL_BADGES),
+                "total_badges_earned": total_badges_earned,
                 "completion_percentage": completion_percentage,
+                "tier": tier_name,
+                "tier_emoji": tier_emoji,
+                "tier_target": tier_target,
                 "average_badges": average_badges,
                 "badge_completion_stats": badge_completion_stats,
                 "completion_distribution": completion_distribution,
@@ -452,7 +505,8 @@ class DatabaseOperations:
             return {
                 "program_name": "Google Cloud Study Jams 2025",
                 "total_users": 0, "completed_users": 0, "total_badges": 20,
-                "completion_percentage": 0, "average_badges": 0,
+                "completion_percentage": 0, "tier": "Tier 3", "tier_emoji": "🥉",
+                "tier_target": 50, "average_badges": 0,
                 "badge_completion_stats": {badge: 0 for badge in ALL_BADGES},
                 "completion_distribution": {str(i): 0 for i in range(21)},
                 "top_performer": {}, "progress_timeline": {},
@@ -480,7 +534,7 @@ class DatabaseOperations:
 
             # Get user badges with details
             cursor.execute("""
-                SELECT badge_name, badge_url, earned_date, submitted_at
+                SELECT badge_name, badge_url, submitted_at
                 FROM badges
                 WHERE user_discord_id = %s
                 ORDER BY submitted_at ASC
@@ -548,7 +602,7 @@ class DatabaseOperations:
                     u.skillsboost_url,
                     u.profile_color,
                     COUNT(b.id) as badge_count,
-                    MAX(b.earned_date) as latest_badge_date,
+                    MAX(b.submitted_at) as latest_badge_date,
                     GROUP_CONCAT(b.badge_name SEPARATOR '|||') as badges_earned
                 FROM users u
                 LEFT JOIN badges b ON u.discord_id = b.user_discord_id
@@ -722,7 +776,7 @@ class DatabaseOperations:
 
         try:
             cursor.execute("""
-                SELECT badge_name, badge_url, earned_date, submitted_at
+                SELECT badge_name, badge_url, submitted_at
                 FROM badges
                 WHERE user_discord_id = %s
                 ORDER BY submitted_at DESC
@@ -774,9 +828,10 @@ class DatabaseOperations:
         # Create compatible format for Discord bot commands
         return {
             "total_users": stats.get("total_users", 0),
-            "verified_users": stats.get("total_users", 0),  # Same as total_users since we only count verified
+            "verified_users": stats.get("verified_users", 0),
             "completed_users": stats.get("completed_users", 0),
-            "total_badges": stats.get("average_badges", 0) * stats.get("total_users", 1),  # Total badges earned
+            "total_badges": int(stats.get("total_badges_earned", 0)),  # Use actual count from database
+            "average_badges": stats.get("average_badges", 0),  # Average for users with badges
             "badge_distribution": stats.get("badge_completion_stats", {}),
             "completion_percentage": stats.get("completion_percentage", 0),
             "program_name": stats.get("program_name", "Google Cloud Study Jams 2025"),
