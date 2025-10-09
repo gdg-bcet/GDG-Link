@@ -43,7 +43,7 @@ class Profile(commands.Cog):
             embed.add_field(name="🎉 Status", value="**COMPLETED!** 🏆", inline=False)
 
         if badges:
-            recent_badges = sorted(badges, key=lambda x: x['earned_date'], reverse=True)[:5]
+            recent_badges = sorted(badges, key=lambda x: x['submitted_at'], reverse=True)[:5]
             badge_list = "\n".join([f"• {b['badge_name']}" for b in recent_badges])
             embed.add_field(name=f"🏅 Recent Badges ({min(5, len(badges))})", value=badge_list, inline=False)
 
@@ -94,18 +94,20 @@ class Profile(commands.Cog):
                 )
 
             if badges:
-                sorted_badges = sorted(badges, key=lambda x: x['earned_date'], reverse=True)
+                sorted_badges = sorted(badges, key=lambda x: x['submitted_at'], reverse=True)
 
-                badge_text = ""
+                badge_list = []
                 for badge in sorted_badges:
-                    badge_text += f"✅ [{badge['badge_name']}]({badge['badge_url']})\n"
+                    badge_list.append(f"✅ {badge['badge_name']}")
+
+                badge_text = "\n".join(badge_list)
 
                 if len(badge_text) > 1024:
-                    chunks = [badge_text[i:i+1024] for i in range(0, len(badge_text), 1024)]
+                    chunks = [badge_list[i:i+20] for i in range(0, len(badge_list), 20)]
                     for i, chunk in enumerate(chunks):
                         embed.add_field(
-                            name=f"🏅 Badges (Part {i+1})" if len(chunks) > 1 else "🏅 Earned Badges",
-                            value=chunk,
+                            name=f"🏅 Badges (Part {i+1}/{len(chunks)})" if len(chunks) > 1 else "🏅 Earned Badges",
+                            value="\n".join(chunk),
                             inline=False
                         )
                 else:
