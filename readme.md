@@ -24,7 +24,7 @@ A Discord bot and REST API for tracking Google Cloud Skills Boost badge progress
 
 ```bash
 git clone <repository-url>
-cd "GD Bot"
+cd "GDG-Link"
 ```
 
 2. Install dependencies:
@@ -36,7 +36,6 @@ pip install -r requirements.txt
 3. Configure environment variables:
 
 ```bash
-cp .env.example .env
 # Edit .env with your credentials
 ```
 
@@ -127,13 +126,6 @@ GD Bot/
 └── .env                   # Environment variables (not committed)
 ```
 
-## Documentation
-
-- [Security Notice](SECURITY_NOTICE.md) - Important security information
-- [Security Fixes Summary](SECURITY_FIXES_SUMMARY.md) - Recent security improvements
-- [Database Reference](DATABASE_REFERENCE.md) - Database schema
-- [Frontend Development Plan](FRONTEND_DEVELOPMENT_PLAN.md) - Frontend integration guide
-
 ## License
 
 MIT License
@@ -145,3 +137,4 @@ For issues and questions, please open an issue in the repository.
 ---
 
 **Developed for Google Cloud Study Jams 2025 by GDG BCET**
+
